@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/types";
 
@@ -78,10 +73,11 @@ export default function DashboardRplPage() {
 
         const json = await res.json();
 
-        if (Array.isArray(json)) setMaterials(json);
-        else if (Array.isArray(json?.data))
-          setMaterials(json.data);
-        else setMaterials([]);
+        let fetchedData = [];
+        if (Array.isArray(json)) fetchedData = json;
+        else if (Array.isArray(json?.data)) fetchedData = json.data;
+
+        setMaterials(fetchedData);
 
         setLastUpdated(
           new Date().toLocaleString("id-ID", {
@@ -103,102 +99,68 @@ export default function DashboardRplPage() {
   // =========================
   // STATUS LOGIC
   // =========================
-  const getMaterialStatus = useCallback((m: Material) => {
-    const type = String(
-      m.productType || m.tipe || m.type || ""
-    ).toLowerCase();
+  const getMaterialStatus = useCallback((m: Material): string => {
+    const type = String(m.Tipe || m.productType || m.tipe || m.type || "").toLowerCase();
+    const remark = String(m["Remark Status"] || m.remark || m.remarkStatus || "").toLowerCase();
 
-    const remark = String(
-      m.remark || m.remarkStatus || ""
-    ).toLowerCase();
-
-    const alasan = String(
-      m.alasanBlock || m["Alasan Block"] || ""
-    ).toLowerCase();
-
-    if (type === "block" || remark.includes("blocked"))
+    // 1. FILTER UTAMA: Kalau tipenya block atau remarknya blocked, mutlak BLOCKED
+    if (type === "block" || remark.includes("blocked")) {
       return "blocked";
-
-    if (
-      remark.includes("shortage") ||
-      alasan.includes("rusak") ||
-      alasan.includes("reject")
-    )
-      return "shortage";
-
-    if (
-      remark.includes("preshortage") ||
-      remark.includes("pre-shortage")
-    )
-      return "preshortage";
-
-    const max = Number(m.maxBinQty || m.maxStock || 0);
-    const curr = Number(m.currentQuantity || m.stock || 0);
-
-    if (max > 0) {
-      if (curr <= Math.ceil(max * 0.3)) return "shortage";
-      if (curr <= Math.ceil(max * 0.6))
-        return "preshortage";
     }
 
+    // 2. KECUALI TYPE BLOCKED (Masuk ke sini berarti kanban, option, consumable, special)
+    if (type !== "block" && !remark.includes("blocked")) {
+      
+      // Define shortage dari text remark-nya dulu
+      if (remark.includes("shortage")) return "shortage";
+      if (remark.includes("preshortage") || remark.includes("pre-shortage")) return "preshortage";
+    }
+
+    // Kalau aman semua, berarti OK
     return "ok";
-  }, []);
+  }, []);  
 
   // =========================
   // FILTER OPTION
   // =========================
-  const { uniqueVendors, uniqueMaterials, uniqueRemarks } =
-    useMemo(() => {
-      const v = new Set<string>();
-      const m = new Set<string>();
-      const r = new Set<string>();
+  const { uniqueVendors, uniqueMaterials, uniqueRemarks } = useMemo(() => {
+    const v = new Set<string>();
+    const m = new Set<string>();
+    const r = new Set<string>();
 
-      materials.forEach((x) => {
-        const vendor =
-          x.vendorCode || x.vendorName || x.vendor;
-        const material =
-          x.materialCode || x.kodeMaterial;
+    materials.forEach((x) => {
+      const vendor = x.Vendor || x.vendorCode || x.vendorName || x.vendor;
+      const material = x["Kode Mate"] || x.materialCode || x.kodeMaterial;
 
-        if (vendor) v.add(vendor);
-        if (material) m.add(material);
+      if (vendor) v.add(vendor);
+      if (material) m.add(material);
 
-        r.add(getMaterialStatus(x));
-      });
+      r.add(getMaterialStatus(x));
+    });
 
-      return {
-        uniqueVendors: Array.from(v).sort(),
-        uniqueMaterials: Array.from(m).sort(),
-        uniqueRemarks: Array.from(r).sort(),
-      };
-    }, [materials, getMaterialStatus]);
+    return {
+      uniqueVendors: Array.from(v).sort(),
+      uniqueMaterials: Array.from(m).sort(),
+      uniqueRemarks: Array.from(r).sort(),
+    };
+  }, [materials, getMaterialStatus]);
 
   // =========================
   // FILTERED DATA
   // =========================
   const filtered = useMemo(() => {
     return materials.filter((m) => {
-      const vendor =
-        m.vendorCode || m.vendorName || m.vendor;
-      const material =
-        m.materialCode || m.kodeMaterial;
+      const vendor = m.Vendor || m.vendorCode || m.vendorName || m.vendor;
+      const material = m["Kode Mate"] || m.materialCode || m.kodeMaterial;
       const status = getMaterialStatus(m);
 
       return (
-        (filterVendor === "all" ||
-          vendor === filterVendor) &&
-        (filterMaterial === "all" ||
-          material === filterMaterial) &&
-        (filterRemark === "all" ||
-          status === filterRemark)
+        (filterVendor === "all" || vendor === filterVendor) &&
+        (filterMaterial === "all" || material === filterMaterial) &&
+        (filterRemark === "all" || status === filterRemark)
       );
     });
-  }, [
-    materials,
-    filterVendor,
-    filterMaterial,
-    filterRemark,
-    getMaterialStatus,
-  ]);
+  }, [materials, filterVendor, filterMaterial, filterRemark, getMaterialStatus]);
 
   // =========================
   // AGGREGATION
@@ -222,19 +184,14 @@ export default function DashboardRplPage() {
       else if (status === "blocked") blocked++;
       else ok++;
 
-      openPO += Number(m.openPo || 0);
-      const vStock = Number(m.vendorStock || 0);
+      openPO += Number(m["Open PO"] || m.openPo || 0);
+      const vStock = Number(m["Vendor Sto"] || m["Vendor Stock"] || m.vendorStock || 0);
       vendorStock += vStock;
 
-      const vendor =
-        m.vendorCode || m.vendorName || "Tanpa Vendor";
-      vendorMap[vendor] =
-        (vendorMap[vendor] || 0) + vStock;
+      const vendor = m.Vendor || m.vendorCode || m.vendorName || "Tanpa Vendor";
+      vendorMap[vendor] = (vendorMap[vendor] || 0) + vStock;
 
-      const type = String(
-        m.productType || m.tipe || "UNKNOWN"
-      ).toUpperCase();
-
+      const type = String(m.Tipe || m.productType || m.tipe || "UNKNOWN").toUpperCase();
       typeMap[type] = (typeMap[type] || 0) + 1;
     });
 
@@ -245,9 +202,7 @@ export default function DashboardRplPage() {
       totalBlocked: blocked,
       totalVendorStock: vendorStock,
       totalOpenPO: openPO,
-      typeData: Object.entries(typeMap).map(
-        ([name, Jumlah]) => ({ name, Jumlah })
-      ),
+      typeData: Object.entries(typeMap).map(([name, Jumlah]) => ({ name, Jumlah })),
       vendorData: Object.entries(vendorMap)
         .map(([name, VendorStock]) => ({
           name,
@@ -267,7 +222,7 @@ export default function DashboardRplPage() {
   if (!role) return null;
   if (isLoading)
     return (
-      <div className="p-10 text-center">
+      <div className="p-10 text-center text-gray-500 font-medium">
         Loading dashboard...
       </div>
     );
@@ -276,49 +231,58 @@ export default function DashboardRplPage() {
     <div className="p-6 bg-gray-50 min-h-screen space-y-8">
       {/* HEADER */}
       <div>
-        <h1 className="text-2xl font-semibold">
-          Dashboard Summary
-        </h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold">Dashboard Summary</h1>
+        <p className="text-sm text-gray-500 mt-1">
           Terakhir diperbarui: {lastUpdated}
         </p>
+
+        {/* KOTAK HITAM BUAT NGECEK DATA */}
+        {materials.length > 0 && (
+          <div className="mt-4 p-4 bg-gray-900 text-green-400 text-xs rounded-lg overflow-auto max-h-64 shadow-inner text-left">
+            <p className="text-white mb-2 font-bold tracking-wider">--- CEK NAMA KOLOM DARI GOLANG ---</p>
+            <pre className="font-mono">{JSON.stringify(materials[0], null, 2)}</pre>
+          </div>
+        )}
       </div>
 
       {/* FILTER */}
-      <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl shadow">
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl shadow-sm border">
         <select
+          className="border rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500"
           value={filterMaterial}
-          onChange={(e) =>
-            setFilterMaterial(e.target.value)
-          }
+          onChange={(e) => setFilterMaterial(e.target.value)}
         >
           <option value="all">Semua Material</option>
           {uniqueMaterials.map((m) => (
-            <option key={m}>{m}</option>
+            <option key={m} value={m}>
+              {m}
+            </option>
           ))}
         </select>
 
         <select
+          className="border rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500"
           value={filterVendor}
-          onChange={(e) =>
-            setFilterVendor(e.target.value)
-          }
+          onChange={(e) => setFilterVendor(e.target.value)}
         >
           <option value="all">Semua Vendor</option>
           {uniqueVendors.map((v) => (
-            <option key={v}>{v}</option>
+            <option key={v} value={v}>
+              {v}
+            </option>
           ))}
         </select>
 
         <select
+          className="border rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500 capitalize"
           value={filterRemark}
-          onChange={(e) =>
-            setFilterRemark(e.target.value)
-          }
+          onChange={(e) => setFilterRemark(e.target.value)}
         >
           <option value="all">Semua Status</option>
           {uniqueRemarks.map((r) => (
-            <option key={r}>{r}</option>
+            <option key={r} value={r}>
+              {r}
+            </option>
           ))}
         </select>
       </div>
@@ -335,33 +299,35 @@ export default function DashboardRplPage() {
 
       {/* CHART ROW 1 */}
       <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow h-[350px]">
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border h-[350px]">
+          <h3 className="text-sm font-semibold mb-4 text-gray-700">Tipe Material</h3>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={summary.typeData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis allowDecimals={false} />
-              <RechartsTooltip />
-              <Bar dataKey="Jumlah" fill="#3b82f6" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <RechartsTooltip cursor={{ fill: "#f3f4f6" }} />
+              <Bar dataKey="Jumlah" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow h-[350px]">
+        <div className="bg-white p-6 rounded-xl shadow-sm border h-[350px]">
+          <h3 className="text-sm font-semibold mb-2 text-gray-700">Status Material</h3>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={summary.pieData}
                 dataKey="value"
                 cx="50%"
-                cy="50%"
+                cy="45%"
                 outerRadius={90}
               >
                 {summary.pieData.map((entry, i) => (
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Legend />
+              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: "12px" }} />
               <RechartsTooltip />
             </PieChart>
           </ResponsiveContainer>
@@ -369,20 +335,15 @@ export default function DashboardRplPage() {
       </div>
 
       {/* VENDOR CHART */}
-      <div className="bg-white p-6 rounded-xl shadow h-[400px]">
+      <div className="bg-white p-6 rounded-xl shadow-sm border h-[400px]">
+        <h3 className="text-sm font-semibold mb-4 text-gray-700">Stok Berdasarkan Vendor</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={summary.vendorData}
-            layout="vertical"
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis dataKey="name" type="category" />
-            <RechartsTooltip />
-            <Bar
-              dataKey="VendorStock"
-              fill="#a855f7"
-            />
+          <BarChart data={summary.vendorData} layout="vertical" margin={{ left: 50 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12 }} />
+            <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+            <RechartsTooltip cursor={{ fill: "#f3f4f6" }} />
+            <Bar dataKey="VendorStock" fill="#a855f7" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -391,21 +352,13 @@ export default function DashboardRplPage() {
 }
 
 // SIMPLE CARD COMPONENT
-function Card({
-  title,
-  value,
-}: {
-  title: string;
-  value: number;
-}) {
+function Card({ title, value }: { title: string; value: number }) {
   return (
-    <div className="bg-white p-4 rounded-xl shadow text-center">
-      <h3 className="text-xs text-gray-500 uppercase">
+    <div className="bg-white p-4 rounded-xl shadow-sm border text-center flex flex-col justify-center items-center">
+      <h3 className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">
         {title}
       </h3>
-      <p className="text-2xl font-semibold mt-2">
-        {value}
-      </p>
+      <p className="text-2xl font-bold text-gray-800 mt-2">{value}</p>
     </div>
   );
 }
