@@ -50,7 +50,10 @@ export function MaterialPage() {
         },
       });
       if (!res.ok) {
-        throw new Error("Gagal mengambil data material");
+        // Ini bakal ngebongkar isi penolakan dari Backend Go
+        const errorDetail = await res.text(); 
+        console.error("Backend nolak nih bang! Status:", res.status, "Detail:", errorDetail);
+        throw new Error(`Gagal (Status ${res.status}): ${errorDetail}`);
       }
       const materials = await res.json();
       setData(materials || []);
