@@ -86,7 +86,7 @@ export default function DashboardRplPage() {
       openPOSum += Number(m.openPO || 0);
       vendorStockSum += Number(m.vendorStock || 0);
     });
-    return { shortage, preshortage, blocked, ok, openPOSum, vendorStockSum, total: filteredData.length };
+    return { shortage, preshortage, blocked, ok, openPo: openPOSum, vendorStock: vendorStockSum, total: filteredData.length };
   }, [filteredData, getMaterialStatus]);
 
   // 5. Siapin Data buat Bar Charts
